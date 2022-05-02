@@ -1,0 +1,59 @@
+edit locallib.php
+
+//created by amit
+//amit start
+function zoom_get_teacher_id($course){
+    global $DB;
+    $role = $DB->get_record('role', array('shortname' => 'editingteacher'));
+    $context = get_context_instance(CONTEXT_COURSE, $course);
+    $teachers = get_role_users($role->id, $context);
+    foreach ($teachers as $teacher) {
+        $teacherz= $teacher->email;
+    }
+    $zoomuserid = false;
+        $service = new mod_zoom_webservice();
+        try {
+            $zoomuser = $service->get_user($teacherz);
+            if ($zoomuser !== false) {
+                $zoomuserid = $zoomuser->id;
+            }
+        } catch (moodle_exception $error) {
+            if ($required) {
+                throw $error;
+            } else {
+                $zoomuserid = $zoomuser->id;
+            }
+        }
+    return $zoomuserid;
+}
+//amit end
+
+edit mod_form
+// Add host id (will error if user does not have an account on Zoom).
+        //$mform->addElement('hidden', 'host_id', zoom_get_user_id());//amit edited on 14 July 2020
+        $mform->addElement('hidden', 'host_id', zoom_get_teacher_id($PAGE->course->id));//amit edited on 14 July 2020
+        $mform->setType('host_id', PARAM_ALPHANUMEXT);
+
+        // Validation in validation(). Default to one hour.
+        //$mform->setDefault('duration', array('number' => 1, 'timeunit' => 3600));
+        $mform->setDefault('duration', array('number' => 90, 'timeunit' => 60));
+
+edit participants.php
+add idnumber to table.
+
+classes/webservice.php
+public function create_meeting($zoom) { 
+        // Checks whether we need to recycle licenses and acts accordingly.
+        if ($this->recyclelicenses && $this->_make_call("users/$zoom->host_id")->type == ZOOM_USER_TYPE_BASIC) {
+            if ($this->_paid_user_limit_reached()) {
+                $leastrecentlyactivepaiduserid = $this->_get_least_recently_active_paid_user_id();
+                // Changes least_recently_active_user to a basic user so we can use their license.
+                //$this->_make_call("users/$leastrecentlyactivepaiduserid", array('type' => ZOOM_USER_TYPE_BASIC), 'patch');//by amit
+            }
+            // Changes current user to pro so they can make a meeting.
+            //$this->_make_call("users/$zoom->host_id", array('type' => ZOOM_USER_TYPE_PRO), 'patch');//by amit
+        }
+
+        $url = "users/$zoom->host_id/" . ($zoom->webinar ? 'webinars' : 'meetings');
+        return $this->_make_call($url, $this->_database_to_api($zoom), 'post');
+    }
